@@ -1,0 +1,24 @@
+# Data & JSON files
+*.json
+Data/
+report/
+
+# Machine Learning Artifacts
+*.pth
+*.h5
+*.keras
+*.pkl
+
+# Environments & Cache
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+# System & Media
+.git/
+.vscode/
+*.mp4
+*.avi
+*.jpg
+*.png

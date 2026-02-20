@@ -1,0 +1,487 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+.gitignore
+.repomixignore
+app.py
+requirements.txt
+static/css/style.css
+static/js/script.js
+templates/index.html
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path=".repomixignore">
+# Data & JSON files
+*.json
+Data/
+report/
+
+# Machine Learning Artifacts
+*.pth
+*.h5
+*.keras
+*.pkl
+
+# Environments & Cache
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+# System & Media
+.git/
+.vscode/
+*.mp4
+*.avi
+*.jpg
+*.png
+</file>
+
+<file path=".gitignore">
+__pycache__/
+.env
+venv/
+.DS_Store
+</file>
+
+<file path="app.py">
+from flask import Flask, render_template, request, jsonify
+from flask_cors import CORS
+import requests
+import random
+from datetime import datetime
+import pytz
+import math
+
+app = Flask(__name__)
+CORS(app)
+
+# --- CONFIGURATION ---
+API_KEY = "d6b71d7e45680baf0a899cd255f300ce" #
+CITY = "Kochi"
+
+@app.route('/')
+def home():
+    return render_template('index.html')
+@app.route('/get_status', methods=['POST'])
+def get_status():
+    try:
+        # 1. Receive the structured appliance data from the frontend
+        user_data = request.json
+        
+        # 2. Advanced ECE Load Calculation Engine
+        # This loop goes through every appliance (ac, fan, tv, etc.)
+        total_load = 0
+        for appliance_id, details in user_data.items():
+            if details.get('on'):
+                # ECE Formula: Load = Quantity * Power Rating (Watts)
+                qty = details.get('qty', 0)
+                watts = details.get('watts', 0)
+                total_load += (qty * watts)
+
+        # 3. Fetch Live Kochi Weather Data
+        weather_url = f"http://api.openweathermap.org/data/2.5/weather?q={CITY}&appid={API_KEY}&units=metric"
+        response = requests.get(weather_url)
+        data = response.json()
+
+        if response.status_code != 200:
+            return jsonify({"error": "Weather API failed"}), 500
+
+        clouds = data.get('clouds', {}).get('all', 0)
+        temp = data.get('main', {}).get('temp', 30)
+
+        # 4. Solar Generation Curve (Time-Aware IST)
+        ist = pytz.timezone('Asia/Kolkata')
+        now = datetime.now(ist)
+        hour = now.hour + (now.minute / 60)
+
+        MAX_SOLAR_CAPACITY = 3000 
+        if 6 <= hour <= 18:
+            # Sine wave peaks at 12:00 PM (Noon)
+            time_factor = math.sin(math.pi * (hour - 6) / 12)
+            efficiency_factor = time_factor * (1 - (clouds / 100) * 0.75)
+        else:
+            efficiency_factor = 0 # Night mode in Kerala
+
+        current_generation = MAX_SOLAR_CAPACITY * efficiency_factor
+
+        # 5. Financials & Logic
+        is_sufficient = current_generation > total_load
+        savings_per_hour = (current_generation / 1000) * 7 if is_sufficient else 0
+        
+        # Dynamic AI Advice
+        if clouds > 70:
+            weather_advice = "Heavy clouds. Use high-power appliances later."
+        elif is_sufficient:
+            weather_advice = "Great! You are running 100% on clean energy."
+        else:
+            weather_advice = "Load exceeds solar. Consider switching off some appliances."
+
+        return jsonify({
+            "city": CITY,
+            "time": now.strftime("%H:%M"),
+            "temp": temp,
+            "clouds": clouds,
+            "generation_watts": round(max(0, current_generation), 2),
+            "consumption_watts": total_load,
+            "status": "Solar Power Sufficient" if is_sufficient else "Drawing from Grid",
+            "is_solar": is_sufficient,
+            "savings": round(savings_per_hour, 2),
+            "advice": weather_advice
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+if __name__ == '__main__':
+    print("\n" + "="*40)
+    print("SOLAR-SENSE: LIVE & TIME-AWARE")
+    print(f"Current Kochi Time: {datetime.now(pytz.timezone('Asia/Kolkata')).strftime('%H:%M')}")
+    print("="*40 + "\n")
+    app.run(debug=True, port=5000)
+</file>
+
+<file path="static/css/style.css">
+body {
+    background: linear-gradient(135deg, #e0eafc 0%, #cfdef3 100%);
+    min-height: 100vh;
+}
+
+.card {
+    border-radius: 20px;
+    border: none;
+}
+
+#gen-val {
+    font-family: 'Courier New', Courier, monospace;
+    transition: color 0.5s ease;
+}
+body {
+    background: #f8f9fa;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.card {
+    border-radius: 15px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    margin-top: 20px;
+}
+
+#gen-val {
+    font-size: 5rem;
+    font-weight: 800;
+    text-shadow: 0 0 20px rgba(40, 167, 69, 0.2);
+}
+
+.btn-warning {
+    background-color: #ffc107;
+    border: none;
+    padding: 12px;
+    transition: all 0.3s;
+}
+
+.btn-warning:hover {
+    background-color: #e0a800;
+    transform: scale(1.02);
+}
+
+body {
+    background: #f8f9fa;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.card {
+    border-radius: 15px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    margin-top: 20px;
+}
+
+#gen-val {
+    font-size: 5rem;
+    font-weight: 800;
+    text-shadow: 0 0 20px rgba(40, 167, 69, 0.2);
+}
+
+.btn-warning {
+    background-color: #ffc107;
+    border: none;
+    padding: 12px;
+    transition: all 0.3s;
+}
+
+.btn-warning:hover {
+    background-color: #e0a800;
+    transform: scale(1.02);
+}
+</file>
+
+<file path="requirements.txt">
+flask
+requests
+flask-cors
+pytz
+</file>
+
+<file path="static/js/script.js">
+// Helper function to extract data for each appliance row
+function getApplianceData(id) {
+    return {
+        on: document.getElementById(`${id}_toggle`).checked,
+        qty: parseInt(document.getElementById(`${id}_qty`).value) || 0,
+        watts: parseInt(document.getElementById(`${id}_watts`).value) || 0
+    };
+}
+
+async function updateSimulation() {
+    // 1. Harvest all appliance data into a single object
+    const appliancePayload = {
+        ac: getApplianceData('ac'),
+        fan: getApplianceData('fan'),
+        light: getApplianceData('light'),
+        wm: getApplianceData('wm'),
+        tv: getApplianceData('tv')
+    };
+
+    // 2. Select display elements
+    const genDisplay = document.getElementById('gen-val');
+    const savingsDisplay = document.getElementById('savings-val');
+    const statusMsg = document.getElementById('status-msg');
+    const tempDisplay = document.getElementById('weather-temp');
+    const descDisplay = document.getElementById('weather-desc');
+    const cloudDisplay = document.getElementById('cloud-val');
+    const loadDisplay = document.getElementById('load-val');
+    const gridStatus = document.getElementById('grid-status');
+
+    statusMsg.innerText = "Running energy audit...";
+
+    try {
+        // 3. Post the full appliance list to Flask
+        const response = await fetch('/get_status', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(appliancePayload)
+        });
+
+        const data = await response.json();
+
+        if (data.error) {
+            statusMsg.innerText = "Error: " + data.error;
+            return;
+        }
+
+        // 4. Update the UI with the calculated ECE-AI results
+        genDisplay.innerText = data.generation_watts;
+        savingsDisplay.innerText = data.savings;
+        tempDisplay.innerText = `${data.temp}°C`;
+        descDisplay.innerText = `Kochi: ${data.clouds}% Clouds`;
+        cloudDisplay.innerText = `${data.clouds}%`;
+        loadDisplay.innerText = `${data.consumption_watts} W`;
+        statusMsg.innerText = `Status: ${data.status} | AI: ${data.advice}`;
+
+        // 5. Update Status Badges
+        if (data.is_solar) {
+            genDisplay.className = "display-1 fw-bold text-success";
+            gridStatus.innerText = "SOLAR ONLY";
+            gridStatus.className = "badge bg-success";
+        } else {
+            genDisplay.className = "display-1 fw-bold text-danger";
+            gridStatus.innerText = "GRID ACTIVE";
+            gridStatus.className = "badge bg-danger";
+        }
+
+    } catch (err) {
+        console.error("Fetch error:", err);
+        statusMsg.innerText = "Check if Python server is running!";
+    }
+}
+</file>
+
+<file path="templates/index.html">
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solar-Sense Kochi</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="bg-light">
+    <div class="container py-5">
+        <h1 class="text-center mb-4">☀️ Solar-Sense Dashboard</h1>
+        
+        <div class="row">
+            <div class="col-md-4">
+<div class="card p-4 shadow-sm border-0 mb-4">
+    <h3 class="h5 mb-4 fw-bold text-dark">Advanced Smart Load Control</h3>
+    
+    <div class="row mb-2 text-muted small fw-bold">
+        <div class="col-6">APPLIANCE</div>
+        <div class="col-3 text-center">QTY</div>
+        <div class="col-3 text-center">WATTS</div>
+    </div>
+
+    <div class="row align-items-center mb-3">
+        <div class="col-6">
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="ac_toggle" checked>
+                <label class="form-check-label small fw-bold">Air Conditioner</label>
+            </div>
+        </div>
+        <div class="col-3"><input type="number" id="ac_qty" class="form-control form-control-sm text-center" value="1"></div>
+        <div class="col-3"><input type="number" id="ac_watts" class="form-control form-control-sm text-center" value="1500"></div>
+    </div>
+
+    <div class="row align-items-center mb-3">
+        <div class="col-6">
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="fan_toggle" checked>
+                <label class="form-check-label small fw-bold">Ceiling Fans</label>
+            </div>
+        </div>
+        <div class="col-3"><input type="number" id="fan_qty" class="form-control form-control-sm text-center" value="2"></div>
+        <div class="col-3"><input type="number" id="fan_watts" class="form-control form-control-sm text-center" value="75"></div>
+    </div>
+
+    <div class="row align-items-center mb-3">
+        <div class="col-6">
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="light_toggle" checked>
+                <label class="form-check-label small fw-bold">LED Lights</label>
+            </div>
+        </div>
+        <div class="col-3"><input type="number" id="light_qty" class="form-control form-control-sm text-center" value="5"></div>
+        <div class="col-3"><input type="number" id="light_watts" class="form-control form-control-sm text-center" value="12"></div>
+    </div>
+
+    <div class="row align-items-center mb-3">
+        <div class="col-6">
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="wm_toggle">
+                <label class="form-check-label small fw-bold">Washing Machine</label>
+            </div>
+        </div>
+        <div class="col-3"><input type="number" id="wm_qty" class="form-control form-control-sm text-center" value="1"></div>
+        <div class="col-3"><input type="number" id="wm_watts" class="form-control form-control-sm text-center" value="500"></div>
+    </div>
+
+    <div class="row align-items-center mb-3">
+        <div class="col-6">
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="tv_toggle" checked>
+                <label class="form-check-label small fw-bold">LED TV</label>
+            </div>
+        </div>
+        <div class="col-3"><input type="number" id="tv_qty" class="form-control form-control-sm text-center" value="1"></div>
+        <div class="col-3"><input type="number" id="tv_watts" class="form-control form-control-sm text-center" value="100"></div>
+    </div>
+
+    <button class="btn btn-warning w-100 fw-bold py-3 mt-3 shadow-sm" onclick="updateSimulation()">
+        RE-CALCULATE LOAD
+    </button>
+</div>
+
+                <div class="card p-3 shadow-sm border-0 bg-dark text-white text-center">
+                    <p class="mb-0 opacity-75 small">LIVE KOCHI WEATHER</p>
+                    <h4 id="weather-temp" class="fw-bold">--°C</h4>
+                    <p id="weather-desc" class="small mb-0 opacity-75">Fetching data...</p>
+                </div>
+            </div>
+
+            <div class="col-md-8">
+                <div class="card p-5 shadow-sm border-0 text-center bg-white mb-4" style="min-height: 350px;">
+                    <div class="my-auto">
+                        <p class="text-muted fw-bold mb-1">LIVE SOLAR GENERATION</p>
+                        <h2 class="display-1 fw-bold mb-0">
+                            <span id="gen-val" class="text-success">--</span> 
+                            <small class="h3 text-muted">W</small>
+                        </h2>
+                        
+                        <div class="mt-4">
+                            <span class="badge bg-primary px-4 py-2 fs-5 rounded-pill shadow-sm">
+                                Estimated Savings: ₹<span id="savings-val">0.00</span> / hr
+                            </span>
+                        </div>
+
+                        <div id="status-msg" class="text-muted mt-4 bg-light p-2 rounded small fw-bold">
+                            Click recalculate to sync with current Kochi solar irradiance...
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card p-4 shadow-sm border-0">
+                    <h5 class="fw-bold mb-3">System Logic Breakdown</h5>
+                    <table class="table table-borderless align-middle mb-0">
+                        <thead>
+                            <tr class="text-muted small">
+                                <th>METRIC</th>
+                                <th>VALUE</th>
+                                <th>STATUS</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Solar Availability</td>
+                                <td id="cloud-val">--%</td>
+                                <td><span class="badge bg-info">Live Cloud Cover</span></td>
+                            </tr>
+                            <tr>
+                                <td>Total Household Load</td>
+                                <td id="load-val">-- W</td>
+                                <td><span id="grid-status" class="badge bg-secondary">Waiting...</span></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/script.js"></script>
+</body>
+</html>
+</file>
+
+</files>
