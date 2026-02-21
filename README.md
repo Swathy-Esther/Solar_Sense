@@ -6,11 +6,11 @@
 
 ## Basic Details
 
-### Team Name: Astrobiomers
+### Team Name: Hel Tech
 
 ### Team Members
 - Member 1: Swathy Esther - B.Tech Computer Science & AI
-- Member 2: [Partner's Name] - B.Tech Electronics & Communication Engineering
+- Member 2: Aleena Sabu - B.Tech Electronics & Communication Engineering
 
 ### Hosted Project Link
 [https://solar-sense-1.onrender.com](https://solar-sense-1.onrender.com)
@@ -60,3 +60,24 @@ pip install flask requests flask-cors pytz pandas scikit-learn gunicorn
 #### Installation
 ```bash
 pip install flask requests flask-cors pytz pandas scikit-learn gunicorn
+```
+
+### Run
+```bash
+# Train the AI engine first
+python train_model.py  
+
+# Start the Flask production server
+python app.py
+```
+### Project Documentation
+### For Software
+### Screenshots
+<img width="1915" height="865" alt="Screenshot 2026-02-21 090354" src="https://github.com/user-attachments/assets/6f24e7eb-c4b8-4cb2-80ba-9ae3cba0a9ec" />
+<img width="1889" height="869" alt="Screenshot 2026-02-21 090424" src="https://github.com/user-attachments/assets/ff7456a9-2cb1-4a3e-8266-0d348ffe6f10" />
+<img width="1915" height="865" alt="Screenshot 2026-02-21 090354" src="https://github.com/user-attachments/assets/5f0e5f99-1f7c-4a2a-abee-c025591c35d3" />
+<img width="1895" height="865" alt="Screenshot 2026-02-21 090322" src="https://github.com/user-attachments/assets/fa6086db-6733-46cb-912f-2c8d58048c05" />
+
+
+
+
