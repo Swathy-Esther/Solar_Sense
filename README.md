@@ -1,5 +1,6 @@
 <p align="center">
-  <img src="./static/logo.png" alt="Solar Sense Logo" width="250px">
+  <img width="2816" height="1536" alt="SolarSenseLogo" src="https://github.com/user-attachments/assets/9627ab19-a9f6-4ea8-ad21-8b72da238772" />
+
 </p>
 
 # Solar Sense ☀️🎯
@@ -77,6 +78,10 @@ python app.py
 <img width="1889" height="869" alt="Screenshot 2026-02-21 090424" src="https://github.com/user-attachments/assets/ff7456a9-2cb1-4a3e-8266-0d348ffe6f10" />
 <img width="1915" height="865" alt="Screenshot 2026-02-21 090354" src="https://github.com/user-attachments/assets/5f0e5f99-1f7c-4a2a-abee-c025591c35d3" />
 <img width="1895" height="865" alt="Screenshot 2026-02-21 090322" src="https://github.com/user-attachments/assets/fa6086db-6733-46cb-912f-2c8d58048c05" />
+<img width="1919" height="842" alt="Screenshot 2026-02-21 090442" src="https://github.com/user-attachments/assets/273964d8-6bff-45a3-8310-b4c6a08812da" />
+<img width="1889" height="869" alt="Screenshot 2026-02-21 090424" src="https://github.com/user-attachments/assets/10534008-14a4-407a-aca4-ceb017712716" />
+
+
 
 
 
