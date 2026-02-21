@@ -10,7 +10,7 @@
 ### Team Name: Hel Tech
 
 ### Team Members
-- Member 1: Swathy Esther - B.Tech Computer Science & AI
+- Member 1: Swathy Esther Yohannan - B.Tech Computer Science & AI
 - Member 2: Aleena Sabu - B.Tech Electronics & Communication Engineering
 
 ### Hosted Project Link
