@@ -81,6 +81,8 @@ python app.py
 <img width="1919" height="842" alt="Screenshot 2026-02-21 090442" src="https://github.com/user-attachments/assets/273964d8-6bff-45a3-8310-b4c6a08812da" />
 <img width="1889" height="869" alt="Screenshot 2026-02-21 090424" src="https://github.com/user-attachments/assets/10534008-14a4-407a-aca4-ceb017712716" />
 <img width="1220" height="727" alt="Screenshot 2026-02-21 093414" src="https://github.com/user-attachments/assets/1c241783-be33-4d2d-b9d9-e26738fad4e0" />
+<img width="1898" height="860" alt="Screenshot 2026-02-21 094653" src="https://github.com/user-attachments/assets/49fdcdfb-334b-4886-a068-ae86a546e83b" />
+
 
 
 
