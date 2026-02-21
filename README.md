@@ -14,7 +14,7 @@
 - Member 2: Aleena Sabu - B.Tech Electronics & Communication Engineering
 
 ### Hosted Project Link
-[https://solar-sense-1.onrender.com](https://solar-sense-1.onrender.com)
+[https://solar-sense-1.onrender.com](https://solar-sense-1-gxpu.onrender.com)
 
 ### Project Description
 Solar Sense is an AI-powered energy management dashboard that predicts solar panel efficiency using live weather data and performs real-time household energy audits. It bridges the gap between meteorological physics and consumer energy independence.
