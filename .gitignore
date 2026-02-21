@@ -1,4 +1,24 @@
+# Python bytecode and cache
 __pycache__/
-.env
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Environments (Crucial: never upload your local venv!)
 venv/
+.venv/
+env/
+.env
+
+# Project Specific Data
+# We usually ignore the database file so your personal test data 
+# doesn't overwrite someone else's
+history_data.json
+
+# If you want others to generate the data themselves
+# solar_training_data.csv
+
+# OS generated files
 .DS_Store
+Thumbs.db
