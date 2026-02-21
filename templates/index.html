@@ -9,8 +9,10 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body class="bg-light">
-    <div class="container py-5">
-        <h1 class="text-center mb-4">☀️ Solar-Sense Kochi</h1>
+    <div class="container py-5 text-center">
+        <img src="{{ url_for('static', filename='SolarSenseLogo.png') }}" alt="Solar Sense Logo" style="height: 100px; margin-bottom: 20px;">
+
+        <h1 class="text-center mb-4 fw-bold">Solar-Sense</h1>
         
         <div class="row">
             <div class="col-md-4">
@@ -124,6 +126,23 @@
                         Enter meter readings to calculate night capacity...
                     </div>
                 </div>
+                <div class="card p-4 shadow-sm border-0 mt-4 mb-5">
+    <h4 class="fw-bold mb-4">📅 30-Day Energy Trends</h4>
+    <div style="height: 300px;">
+        <canvas id="historyChart"></canvas>
+    </div>
+    
+    <div class="row mt-4 text-center">
+        <div class="col-6">
+            <p class="small text-muted mb-1">Avg. Daily Generation</p>
+            <h5 class="fw-bold text-success"><span id="avg-gen">--</span> kWh</h5>
+        </div>
+        <div class="col-6">
+            <p class="small text-muted mb-1">Avg. Daily Consumption</p>
+            <h5 class="fw-bold text-info"><span id="avg-cons">--</span> kWh</h5>
+        </div>
+    </div>
+</div>
             </div>
         </div>
     </div>

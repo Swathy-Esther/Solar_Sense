@@ -47,10 +47,37 @@ requirements.txt
 static/css/style.css
 static/js/script.js
 templates/index.html
+train_model.py
 </directory_structure>
 
 <files>
 This section contains the contents of the repository's files.
+
+<file path="train_model.py">
+import pandas as pd
+import numpy as np
+
+# Generate 100 days of synthetic Kochi weather data
+np.random.seed(42)
+clouds = np.random.randint(0, 100, 100)
+temp = np.random.randint(24, 35, 100)
+
+# ECE Formula: Efficiency drops as clouds increase and temp goes too high
+# Efficiency = 1.0 - (clouds * 0.007) - ((temp-25) * 0.01) + noise
+efficiency = 1.0 - (clouds * 0.007) - ((temp - 25) * 0.01) + np.random.normal(0, 0.02, 100)
+efficiency = np.clip(efficiency, 0.1, 0.98)
+
+df = pd.DataFrame({'clouds': clouds, 'temp': temp, 'efficiency': efficiency})
+df.to_csv('solar_training_data.csv', index=False)
+print("✅ Training dataset 'solar_training_data.csv' created!")
+</file>
+
+<file path=".gitignore">
+__pycache__/
+.env
+venv/
+.DS_Store
+</file>
 
 <file path=".repomixignore">
 # Data & JSON files
@@ -77,20 +104,17 @@ __pycache__/
 *.avi
 *.jpg
 *.png
-</file>
-
-<file path=".gitignore">
-__pycache__/
-.env
-venv/
-.DS_Store
+*.csv
 </file>
 
 <file path="app.py">
+import pandas as pd
+from sklearn.linear_model import LinearRegression
+import json
+import os
 from flask import Flask, render_template, request, jsonify
 from flask_cors import CORS
 import requests
-import random
 from datetime import datetime
 import pytz
 import math
@@ -99,87 +123,146 @@ app = Flask(__name__)
 CORS(app)
 
 # --- CONFIGURATION ---
-API_KEY = "d6b71d7e45680baf0a899cd255f300ce" #
+API_KEY = "d6b71d7e45680baf0a899cd255f300ce"
 CITY = "Kochi"
+DB_FILE = 'history_data.json'
+
+# --- AI ENGINE: ML MODEL TRAINING ---
+print("🤖 AI ENGINE: Training Linear Regression model on Kochi dataset...")
+
+# Load the synthetic dataset (Ensure you ran train_model.py first!)
+try:
+    df = pd.read_csv('solar_training_data.csv')
+    X = df[['clouds', 'temp']]
+    y = df['efficiency']
+    ml_model = LinearRegression().fit(X, y)
+    r_sq = round(ml_model.score(X, y), 2)
+    print(f"✅ AI ENGINE: Model trained. Accuracy (R²): {r_sq}")
+except Exception as e:
+    print(f"❌ AI ENGINE ERROR: Could not load training data. Run train_model.py. {e}")
+
+def get_ml_efficiency(clouds, temp):
+    # Use the model to predict efficiency based on live weather
+    try:
+        prediction = ml_model.predict([[clouds, temp]])
+        return round(max(0.1, float(prediction[0])), 3)
+    except:
+        return 0.5 # Default fallback efficiency
 
 @app.route('/')
 def home():
     return render_template('index.html')
+
 @app.route('/get_status', methods=['POST'])
 def get_status():
     try:
-        # 1. Receive the structured appliance data from the frontend
         user_data = request.json
         
-        # 2. Advanced ECE Load Calculation Engine
-        # This loop goes through every appliance (ac, fan, tv, etc.)
+        # 1. Advanced ECE Load Calculation Engine
         total_load = 0
-        for appliance_id, details in user_data.items():
-            if details.get('on'):
-                # ECE Formula: Load = Quantity * Power Rating (Watts)
+        for key, details in user_data.items():
+            if isinstance(details, dict) and details.get('on'):
                 qty = details.get('qty', 0)
                 watts = details.get('watts', 0)
                 total_load += (qty * watts)
 
-        # 3. Fetch Live Kochi Weather Data
+        # 2. Fetch Live Weather Data for Kochi
         weather_url = f"http://api.openweathermap.org/data/2.5/weather?q={CITY}&appid={API_KEY}&units=metric"
         response = requests.get(weather_url)
-        data = response.json()
+        w_data = response.json()
+        clouds = w_data.get('clouds', {}).get('all', 0)
+        temp = w_data.get('main', {}).get('temp', 30)
 
-        if response.status_code != 200:
-            return jsonify({"error": "Weather API failed"}), 500
-
-        clouds = data.get('clouds', {}).get('all', 0)
-        temp = data.get('main', {}).get('temp', 30)
-
-        # 4. Solar Generation Curve (Time-Aware IST)
-        ist = pytz.timezone('Asia/Kolkata')
-        now = datetime.now(ist)
-        hour = now.hour + (now.minute / 60)
-
-        MAX_SOLAR_CAPACITY = 3000 
-        if 6 <= hour <= 18:
-            # Sine wave peaks at 12:00 PM (Noon)
-            time_factor = math.sin(math.pi * (hour - 6) / 12)
-            efficiency_factor = time_factor * (1 - (clouds / 100) * 0.75)
+        # 3. ECE "Time Travel" Logic - STABLE VERSION
+        sim_hour_raw = user_data.get('sim_hour')
+        if sim_hour_raw is not None and str(sim_hour_raw).strip() != "":
+            hour = float(sim_hour_raw)
         else:
-            efficiency_factor = 0 # Night mode in Kerala
+            ist = pytz.timezone('Asia/Kolkata')
+            now = datetime.now(ist)
+            hour = now.hour + (now.minute / 60)
 
-        current_generation = MAX_SOLAR_CAPACITY * efficiency_factor
+        # 4. Solar Generation Curve
+        MAX_SOLAR_CAPACITY = 3000 
+        is_night = hour < 6 or hour > 18 
+        
+        # Use ML Model to dictate base efficiency
+        ml_efficiency_base = get_ml_efficiency(clouds, temp)
+        
+        if 6 <= hour <= 18:
+            time_factor = math.sin(math.pi * (hour - 6) / 12)
+            efficiency_factor = time_factor * ml_efficiency_base
+        else:
+            efficiency_factor = 0
 
-        # 5. Financials & Logic
+        # Define current_generation early so Step 6 can use it!
+        current_generation = round(MAX_SOLAR_CAPACITY * efficiency_factor, 2)
+
+        # 5. NEW: Dynamic Daily Yield Calculation
+        daily_est_yield = round(15 * (1 - (clouds / 100) * 0.5), 1)
+
+        # 6. Financials & Advice
         is_sufficient = current_generation > total_load
         savings_per_hour = (current_generation / 1000) * 7 if is_sufficient else 0
         
-        # Dynamic AI Advice
-        if clouds > 70:
-            weather_advice = "Heavy clouds. Use high-power appliances later."
+        if is_night:
+            weather_advice = "Night Mode: Use stored energy for high-load appliances."
         elif is_sufficient:
-            weather_advice = "Great! You are running 100% on clean energy."
+            weather_advice = "Optimal: Running 100% on Solar."
         else:
-            weather_advice = "Load exceeds solar. Consider switching off some appliances."
+            weather_advice = "Load exceeds solar. Consider shedding appliances."
 
         return jsonify({
             "city": CITY,
-            "time": now.strftime("%H:%M"),
             "temp": temp,
             "clouds": clouds,
-            "generation_watts": round(max(0, current_generation), 2),
+            "generation_watts": current_generation,
             "consumption_watts": total_load,
             "status": "Solar Power Sufficient" if is_sufficient else "Drawing from Grid",
             "is_solar": is_sufficient,
+            "is_night": is_night,
             "savings": round(savings_per_hour, 2),
-            "advice": weather_advice
+            "advice": weather_advice,
+            "daily_yield": daily_est_yield,
+            "time": f"{int(hour)}:00" if sim_hour_raw is not None else "Live"
         })
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# --- 30-DAY HISTORY ROUTES ---
+@app.route('/save_daily_data', methods=['POST'])
+def save_daily_data():
+    try:
+        data = request.json
+        history = []
+        if os.path.exists(DB_FILE):
+            with open(DB_FILE, 'r') as f:
+                history = json.load(f)
+        
+        history.append({
+            "date": datetime.now().strftime("%d %b"),
+            "gen": data.get('gen'),
+            "cons": data.get('cons')
+        })
+        
+        history = history[-30:] # Keep last 30 entries
+        
+        with open(DB_FILE, 'w') as f:
+            json.dump(history, f)
+            
+        return jsonify(history)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/get_history')
+def get_history():
+    if os.path.exists(DB_FILE):
+        with open(DB_FILE, 'r') as f:
+            return jsonify(json.load(f))
+    return jsonify([])
+
 if __name__ == '__main__':
-    print("\n" + "="*40)
-    print("SOLAR-SENSE: LIVE & TIME-AWARE")
-    print(f"Current Kochi Time: {datetime.now(pytz.timezone('Asia/Kolkata')).strftime('%H:%M')}")
-    print("="*40 + "\n")
     app.run(debug=True, port=5000)
 </file>
 
@@ -255,6 +338,25 @@ body {
     background-color: #e0a800;
     transform: scale(1.02);
 }
+
+
+/* Night Mode Styles */
+body.night-mode {
+    background-color: #1a1a2e !important;
+    color: #e0e0e0 !important;
+    transition: background-color 0.5s ease;
+}
+
+body.night-mode .card {
+    background-color: #16213e !important;
+    color: white !important;
+    border: 1px solid #0f3460;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+}
+
+body.night-mode .text-muted {
+    color: #a0a0a0 !important;
+}
 </file>
 
 <file path="requirements.txt">
@@ -265,6 +367,9 @@ pytz
 </file>
 
 <file path="static/js/script.js">
+let myChart; // For the 12-hour predictive curve
+let histChart; // For the 30-day historical trends
+
 // Helper function to extract data for each appliance row
 function getApplianceData(id) {
     return {
@@ -274,9 +379,82 @@ function getApplianceData(id) {
     };
 }
 
+// 🕒 Update simulation time label and trigger real-time recalculation
+function updateTimeLabel(val) {
+    const ampm = val >= 12 ? 'PM' : 'AM';
+    const displayHour = val % 12 || 12;
+    document.getElementById('time_label').innerText = `Simulation Time: ${displayHour} ${ampm}`;
+    updateSimulation();
+}
+
+// 📈 Draw the predictive sine wave chart for Kochi's daily sun path
+function updatePredictionChart(clouds) {
+    const ctx = document.getElementById('predictionChart').getContext('2d');
+    const labels = [];
+    const predictionData = [];
+    const MAX_SOLAR = 3000;
+
+    for (let h = 6; h <= 18; h++) {
+        labels.push(`${h}:00`);
+        const timeFactor = Math.sin(Math.PI * (h - 6) / 12);
+        const efficiency = timeFactor * (1 - (clouds / 100) * 0.75);
+        predictionData.push(Math.round(MAX_SOLAR * efficiency));
+    }
+
+    if (myChart) myChart.destroy();
+
+    myChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Forecasted Watts (W)',
+                data: predictionData,
+                borderColor: '#ffc107',
+                backgroundColor: 'rgba(255, 193, 7, 0.2)',
+                fill: true,
+                tension: 0.4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } }
+        }
+    });
+}
+
+// 📅 Draw the 30-day historical trend chart
+function updateHistoryChart(history) {
+    const ctx = document.getElementById('historyChart').getContext('2d');
+
+    // Calculate 30-day averages
+    const avgGen = history.reduce((sum, d) => sum + d.gen, 0) / (history.length || 1);
+    const avgCons = history.reduce((sum, d) => sum + d.cons, 0) / (history.length || 1);
+    document.getElementById('avg-gen').innerText = avgGen.toFixed(1);
+    document.getElementById('avg-cons').innerText = avgCons.toFixed(1);
+
+    if (histChart) histChart.destroy();
+    histChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: history.map(d => d.date),
+            datasets: [
+                { label: 'Solar Gen (kWh)', data: history.map(d => d.gen), borderColor: '#198754', tension: 0.3 },
+                { label: 'Consumption (kWh)', data: history.map(d => d.cons), borderColor: '#0dcaf0', tension: 0.3 }
+            ]
+        },
+        options: { responsive: true, maintainAspectRatio: false }
+    });
+}
+
 async function updateSimulation() {
-    // 1. Harvest all appliance data into a single object
+    // Ensure we always have a number, even if the slider is jittery
+    const sliderElem = document.getElementById('time_slider');
+    const simulatedHour = sliderElem ? parseInt(sliderElem.value) : 12;
+    //const simulatedHour = document.getElementById('time_slider').value;
     const appliancePayload = {
+        sim_hour: parseInt(simulatedHour),
         ac: getApplianceData('ac'),
         fan: getApplianceData('fan'),
         light: getApplianceData('light'),
@@ -284,20 +462,7 @@ async function updateSimulation() {
         tv: getApplianceData('tv')
     };
 
-    // 2. Select display elements
-    const genDisplay = document.getElementById('gen-val');
-    const savingsDisplay = document.getElementById('savings-val');
-    const statusMsg = document.getElementById('status-msg');
-    const tempDisplay = document.getElementById('weather-temp');
-    const descDisplay = document.getElementById('weather-desc');
-    const cloudDisplay = document.getElementById('cloud-val');
-    const loadDisplay = document.getElementById('load-val');
-    const gridStatus = document.getElementById('grid-status');
-
-    statusMsg.innerText = "Running energy audit...";
-
     try {
-        // 3. Post the full appliance list to Flask
         const response = await fetch('/get_status', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -306,36 +471,73 @@ async function updateSimulation() {
 
         const data = await response.json();
 
-        if (data.error) {
-            statusMsg.innerText = "Error: " + data.error;
-            return;
-        }
-
-        // 4. Update the UI with the calculated ECE-AI results
-        genDisplay.innerText = data.generation_watts;
-        savingsDisplay.innerText = data.savings;
-        tempDisplay.innerText = `${data.temp}°C`;
-        descDisplay.innerText = `Kochi: ${data.clouds}% Clouds`;
-        cloudDisplay.innerText = `${data.clouds}%`;
-        loadDisplay.innerText = `${data.consumption_watts} W`;
-        statusMsg.innerText = `Status: ${data.status} | AI: ${data.advice}`;
-
-        // 5. Update Status Badges
-        if (data.is_solar) {
-            genDisplay.className = "display-1 fw-bold text-success";
-            gridStatus.innerText = "SOLAR ONLY";
-            gridStatus.className = "badge bg-success";
+        if (data.is_night) {
+            document.body.classList.add('night-mode');
         } else {
-            genDisplay.className = "display-1 fw-bold text-danger";
-            gridStatus.innerText = "GRID ACTIVE";
-            gridStatus.className = "badge bg-danger";
+            document.body.classList.remove('night-mode');
         }
+
+        // Sync main UI elements
+        document.getElementById('gen-val').innerText = data.generation_watts;
+        document.getElementById('savings-val').innerText = data.savings;
+        document.getElementById('weather-temp').innerText = `${data.temp}°C`;
+        document.getElementById('weather-desc').innerText = `Kochi: ${data.clouds}% Clouds`;
+        document.getElementById('cloud-val').innerText = `${data.clouds}%`;
+        document.getElementById('load-val').innerText = `${data.consumption_watts} W`;
+        document.getElementById('status-msg').innerText = `Status: ${data.status} | AI: ${data.advice}`;
+        document.getElementById('night-yield').innerText = data.daily_yield; // Sync dynamic yield
+
+        const gridStatus = document.getElementById('grid-status');
+        gridStatus.innerText = data.is_solar ? "SOLAR ONLY" : "GRID ACTIVE";
+        gridStatus.className = data.is_solar ? "badge bg-success" : "badge bg-danger";
+
+        updatePredictionChart(data.clouds);
+
+        // Auto-fetch history on every refresh to keep trends updated
+        fetch('/get_history').then(res => res.json()).then(history => {
+            if (history.length > 0) updateHistoryChart(history);
+        });
 
     } catch (err) {
         console.error("Fetch error:", err);
-        statusMsg.innerText = "Check if Python server is running!";
     }
 }
+
+function calculateNightMetrics() {
+    const morning = parseFloat(document.getElementById('meter_morning').value) || 0;
+    const evening = parseFloat(document.getElementById('meter_evening').value) || 0;
+    const estYield = parseFloat(document.getElementById('night-yield').innerText) || 0;
+
+    const consumption = Math.max(0, evening - morning);
+    const excess = Math.max(0, estYield - consumption);
+
+    document.getElementById('night-used').innerText = consumption.toFixed(1);
+    document.getElementById('night-excess').innerText = excess.toFixed(1);
+
+    // Save this interaction to the 30-day history database
+    const dailyData = { gen: estYield, cons: consumption };
+    fetch('/save_daily_data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(dailyData)
+    }).then(res => res.json()).then(history => updateHistoryChart(history));
+
+    // "What Can I Run" Logic
+    const applianceWatts = parseFloat(document.getElementById('check_appliance').value);
+    const hours = parseFloat(document.getElementById('check_hours').value);
+    const requiredKWh = (applianceWatts * hours) / 1000;
+
+    const resultBox = document.getElementById('run-result');
+    if (excess >= requiredKWh) {
+        resultBox.className = "mt-3 p-2 rounded text-center small fw-bold bg-success text-white";
+        resultBox.innerText = `✅ Success: ${excess.toFixed(1)}kWh available. Used: ${requiredKWh.toFixed(1)}kWh.`;
+    } else {
+        resultBox.className = "mt-3 p-2 rounded text-center small fw-bold bg-danger text-white";
+        resultBox.innerText = `❌ Warning: Needs ${requiredKWh.toFixed(1)}kWh. Only ${excess.toFixed(1)}kWh stored.`;
+    }
+}
+
+window.onload = updateSimulation;
 </file>
 
 <file path="templates/index.html">
@@ -347,138 +549,146 @@ async function updateSimulation() {
     <title>Solar-Sense Kochi</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body class="bg-light">
-    <div class="container py-5">
-        <h1 class="text-center mb-4">☀️ Solar-Sense Dashboard</h1>
+    <div class="container py-5 text-center">
+        <img src="{{ url_for('static', filename='SolarSenseLogo.png') }}" alt="Solar Sense Logo" style="height: 100px; margin-bottom: 20px;">
+
+        <h1 class="text-center mb-4 fw-bold">Solar-Sense</h1>
         
         <div class="row">
             <div class="col-md-4">
-<div class="card p-4 shadow-sm border-0 mb-4">
-    <h3 class="h5 mb-4 fw-bold text-dark">Advanced Smart Load Control</h3>
-    
-    <div class="row mb-2 text-muted small fw-bold">
-        <div class="col-6">APPLIANCE</div>
-        <div class="col-3 text-center">QTY</div>
-        <div class="col-3 text-center">WATTS</div>
-    </div>
+                <div class="card p-3 shadow-sm border-0 mb-4 bg-primary text-white text-center">
+                    <h5 class="fw-bold mb-2">🕒 Demo Time Travel</h5>
+                    <input type="range" class="form-range" id="time_slider" min="0" max="23" value="13" oninput="updateTimeLabel(this.value)">
+                    <p class="small fw-bold mb-0" id="time_label">Simulation Time: 1:00 PM</p>
+                </div>
 
-    <div class="row align-items-center mb-3">
-        <div class="col-6">
-            <div class="form-check form-switch">
-                <input class="form-check-input" type="checkbox" id="ac_toggle" checked>
-                <label class="form-check-label small fw-bold">Air Conditioner</label>
-            </div>
-        </div>
-        <div class="col-3"><input type="number" id="ac_qty" class="form-control form-control-sm text-center" value="1"></div>
-        <div class="col-3"><input type="number" id="ac_watts" class="form-control form-control-sm text-center" value="1500"></div>
-    </div>
+                <div class="card p-4 shadow-sm border-0 mb-4">
+                    <h5 class="fw-bold mb-3">Advanced Load Control</h5>
+                    <div class="row mb-2 text-muted small fw-bold">
+                        <div class="col-6">APPLIANCE</div><div class="col-3 text-center">QTY</div><div class="col-3 text-center">W</div>
+                    </div>
+                    
+                    <div class="row align-items-center mb-3">
+                        <div class="col-6"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="ac_toggle" checked><label class="small fw-bold">AC</label></div></div>
+                        <div class="col-3"><input type="number" id="ac_qty" class="form-control form-control-sm text-center" value="1"></div>
+                        <div class="col-3"><input type="number" id="ac_watts" class="form-control form-control-sm text-center" value="1500"></div>
+                    </div>
+                    <div class="row align-items-center mb-3">
+                        <div class="col-6"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="fan_toggle" checked><label class="small fw-bold">Fans</label></div></div>
+                        <div class="col-3"><input type="number" id="fan_qty" class="form-control form-control-sm text-center" value="2"></div>
+                        <div class="col-3"><input type="number" id="fan_watts" class="form-control form-control-sm text-center" value="75"></div>
+                    </div>
+                    <div class="row align-items-center mb-3">
+                        <div class="col-6"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="light_toggle" checked><label class="small fw-bold">LEDs</label></div></div>
+                        <div class="col-3"><input type="number" id="light_qty" class="form-control form-control-sm text-center" value="5"></div>
+                        <div class="col-3"><input type="number" id="light_watts" class="form-control form-control-sm text-center" value="12"></div>
+                    </div>
+                    <div class="row align-items-center mb-3">
+                        <div class="col-6"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="wm_toggle"><label class="small fw-bold">Washing</label></div></div>
+                        <div class="col-3"><input type="number" id="wm_qty" class="form-control form-control-sm text-center" value="1"></div>
+                        <div class="col-3"><input type="number" id="wm_watts" class="form-control form-control-sm text-center" value="500"></div>
+                    </div>
+                    <div class="row align-items-center mb-3">
+                        <div class="col-6"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="tv_toggle" checked><label class="small fw-bold">TV</label></div></div>
+                        <div class="col-3"><input type="number" id="tv_qty" class="form-control form-control-sm text-center" value="1"></div>
+                        <div class="col-3"><input type="number" id="tv_watts" class="form-control form-control-sm text-center" value="100"></div>
+                    </div>
 
-    <div class="row align-items-center mb-3">
-        <div class="col-6">
-            <div class="form-check form-switch">
-                <input class="form-check-input" type="checkbox" id="fan_toggle" checked>
-                <label class="form-check-label small fw-bold">Ceiling Fans</label>
-            </div>
-        </div>
-        <div class="col-3"><input type="number" id="fan_qty" class="form-control form-control-sm text-center" value="2"></div>
-        <div class="col-3"><input type="number" id="fan_watts" class="form-control form-control-sm text-center" value="75"></div>
-    </div>
-
-    <div class="row align-items-center mb-3">
-        <div class="col-6">
-            <div class="form-check form-switch">
-                <input class="form-check-input" type="checkbox" id="light_toggle" checked>
-                <label class="form-check-label small fw-bold">LED Lights</label>
-            </div>
-        </div>
-        <div class="col-3"><input type="number" id="light_qty" class="form-control form-control-sm text-center" value="5"></div>
-        <div class="col-3"><input type="number" id="light_watts" class="form-control form-control-sm text-center" value="12"></div>
-    </div>
-
-    <div class="row align-items-center mb-3">
-        <div class="col-6">
-            <div class="form-check form-switch">
-                <input class="form-check-input" type="checkbox" id="wm_toggle">
-                <label class="form-check-label small fw-bold">Washing Machine</label>
-            </div>
-        </div>
-        <div class="col-3"><input type="number" id="wm_qty" class="form-control form-control-sm text-center" value="1"></div>
-        <div class="col-3"><input type="number" id="wm_watts" class="form-control form-control-sm text-center" value="500"></div>
-    </div>
-
-    <div class="row align-items-center mb-3">
-        <div class="col-6">
-            <div class="form-check form-switch">
-                <input class="form-check-input" type="checkbox" id="tv_toggle" checked>
-                <label class="form-check-label small fw-bold">LED TV</label>
-            </div>
-        </div>
-        <div class="col-3"><input type="number" id="tv_qty" class="form-control form-control-sm text-center" value="1"></div>
-        <div class="col-3"><input type="number" id="tv_watts" class="form-control form-control-sm text-center" value="100"></div>
-    </div>
-
-    <button class="btn btn-warning w-100 fw-bold py-3 mt-3 shadow-sm" onclick="updateSimulation()">
-        RE-CALCULATE LOAD
-    </button>
-</div>
-
-                <div class="card p-3 shadow-sm border-0 bg-dark text-white text-center">
-                    <p class="mb-0 opacity-75 small">LIVE KOCHI WEATHER</p>
-                    <h4 id="weather-temp" class="fw-bold">--°C</h4>
-                    <p id="weather-desc" class="small mb-0 opacity-75">Fetching data...</p>
+                    <button class="btn btn-warning w-100 fw-bold py-3 mt-3" onclick="updateSimulation()">RE-CALCULATE</button>
                 </div>
             </div>
 
             <div class="col-md-8">
-                <div class="card p-5 shadow-sm border-0 text-center bg-white mb-4" style="min-height: 350px;">
-                    <div class="my-auto">
-                        <p class="text-muted fw-bold mb-1">LIVE SOLAR GENERATION</p>
-                        <h2 class="display-1 fw-bold mb-0">
-                            <span id="gen-val" class="text-success">--</span> 
-                            <small class="h3 text-muted">W</small>
-                        </h2>
-                        
-                        <div class="mt-4">
-                            <span class="badge bg-primary px-4 py-2 fs-5 rounded-pill shadow-sm">
-                                Estimated Savings: ₹<span id="savings-val">0.00</span> / hr
-                            </span>
-                        </div>
-
-                        <div id="status-msg" class="text-muted mt-4 bg-light p-2 rounded small fw-bold">
-                            Click recalculate to sync with current Kochi solar irradiance...
-                        </div>
-                    </div>
+                <div class="card p-3 shadow-sm border-0 mb-4">
+                    <h5 class="fw-bold mb-3">Hourly Generation Forecast</h5>
+                    <canvas id="predictionChart" style="max-height: 250px;"></canvas>
                 </div>
 
-                <div class="card p-4 shadow-sm border-0">
-                    <h5 class="fw-bold mb-3">System Logic Breakdown</h5>
-                    <table class="table table-borderless align-middle mb-0">
-                        <thead>
-                            <tr class="text-muted small">
-                                <th>METRIC</th>
-                                <th>VALUE</th>
-                                <th>STATUS</th>
-                            </tr>
-                        </thead>
+                <div class="card p-5 shadow-sm border-0 text-center mb-4">
+                    <p class="text-muted fw-bold mb-1">LIVE GENERATION</p>
+                    <h2 class="display-1 fw-bold mb-0"><span id="gen-val">--</span> <small class="h3">W</small></h2>
+                    <div class="mt-4"><span class="badge bg-primary px-4 py-2 fs-5 rounded-pill">Savings: ₹<span id="savings-val">0.00</span>/hr</span></div>
+                    <div id="status-msg" class="text-muted mt-4 bg-light p-2 rounded small fw-bold">Ready for Energy Audit...</div>
+                </div>
+
+                <div class="card p-4 shadow-sm border-0 mb-4">
+                    <table class="table table-borderless mb-0">
                         <tbody>
-                            <tr>
-                                <td>Solar Availability</td>
-                                <td id="cloud-val">--%</td>
-                                <td><span class="badge bg-info">Live Cloud Cover</span></td>
-                            </tr>
-                            <tr>
-                                <td>Total Household Load</td>
-                                <td id="load-val">-- W</td>
-                                <td><span id="grid-status" class="badge bg-secondary">Waiting...</span></td>
-                            </tr>
+                            <tr><td>Weather: <span id="weather-temp">--</span>, <span id="weather-desc">--</span></td><td>Total Load: <span id="load-val">--</span></td></tr>
+                            <tr><td>Cloud Cover: <span id="cloud-val">--</span></td><td>Status: <span id="grid-status" class="badge bg-secondary">Waiting</span></td></tr>
                         </tbody>
                     </table>
                 </div>
+
+                <div class="card p-4 shadow-sm border-0 mt-4 mb-5" id="night-analytics-card">
+                    <h4 class="fw-bold mb-4">🌙 Night Mode Analytics</h4>
+                    
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-6">
+                            <label class="small fw-bold opacity-75">Morning Meter (kWh)</label>
+                            <input type="number" id="meter_morning" class="form-control" value="1250.5" oninput="calculateNightMetrics()">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="small fw-bold opacity-75">Evening Meter (kWh)</label>
+                            <input type="number" id="meter_evening" class="form-control" value="1258.2" oninput="calculateNightMetrics()">
+                        </div>
+                    </div>
+
+                    <div class="row text-center mb-4">
+                        <div class="col-4">
+                            <p class="small mb-1">Estimated Yield</p>
+                            <h5 class="fw-bold text-warning"><span id="night-yield">--</span> <small>kWh</small></h5>
+                        </div>
+                        <div class="col-4">
+                            <p class="small mb-1">Actual Consumption</p>
+                            <h5 class="fw-bold text-info"><span id="night-used">7.7</span> <small>kWh</small></h5>
+                        </div>
+                        <div class="col-4">
+                            <p class="small mb-1">Excess Stored</p>
+                            <h5 class="fw-bold text-success"><span id="night-excess">--</span> <small>kWh</small></h5>
+                        </div>
+                    </div>
+
+                    <hr class="opacity-25">
+
+                    <h6 class="fw-bold mb-3">⚡ "What Can I Run?"</h6>
+                    <div class="input-group">
+                        <select class="form-select" id="check_appliance">
+                            <option value="1500">Air Conditioner (1.5kW)</option>
+                            <option value="2000">Water Heater (2kW)</option>
+                            <option value="500">Washing Machine (0.5kW)</option>
+                            <option value="100">LED TV (0.1kW)</option>
+                        </select>
+                        <input type="number" id="check_hours" class="form-control" placeholder="Hours" value="2">
+                        <button class="btn btn-primary fw-bold" onclick="calculateNightMetrics()">CHECK</button>
+                    </div>
+                    <div id="run-result" class="mt-3 p-2 rounded text-center small fw-bold bg-light text-dark">
+                        Enter meter readings to calculate night capacity...
+                    </div>
+                </div>
+                <div class="card p-4 shadow-sm border-0 mt-4 mb-5">
+    <h4 class="fw-bold mb-4">📅 30-Day Energy Trends</h4>
+    <div style="height: 300px;">
+        <canvas id="historyChart"></canvas>
+    </div>
+    
+    <div class="row mt-4 text-center">
+        <div class="col-6">
+            <p class="small text-muted mb-1">Avg. Daily Generation</p>
+            <h5 class="fw-bold text-success"><span id="avg-gen">--</span> kWh</h5>
+        </div>
+        <div class="col-6">
+            <p class="small text-muted mb-1">Avg. Daily Consumption</p>
+            <h5 class="fw-bold text-info"><span id="avg-cons">--</span> kWh</h5>
+        </div>
+    </div>
+</div>
             </div>
         </div>
     </div>
-
     <script src="/static/js/script.js"></script>
 </body>
 </html>
